@@ -99,6 +99,26 @@ backup_collection(client, "my_database", "my_collection", backup_dir)
 restore_collection(client, backup_dir, "my_database", "my_collection")
 ```
 
+### Backup Directory Structure
+
+Backups are organized in a `backups` directory within your project:
+
+```
+backups/
+└── mongodb_backup_YYYYMMDD_HHMMSS/
+    ├── database_name/
+    │   └── collection_name.json
+    └── ...
+```
+
+Each backup includes:
+- Timestamp in the directory name
+- Separate directories for each database
+- JSON files for each collection
+- Collection metadata and statistics
+
+By default, backups are stored in the `backups` directory, but you can specify a different location during the backup process.
+
 ## Project Structure
 
 ```
