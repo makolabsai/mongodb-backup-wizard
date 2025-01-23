@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from pymongo import MongoClient
+from bson import ObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -88,51 +89,71 @@ def get_collections_info(client) -> Dict[str, List[Tuple[str, int, int]]]:
     return collections_info
 
 def backup_collection(client, db_name: str, collection_name: str, backup_dir: Path) -> bool:
-    """Backup a single collection to the specified directory."""
-    try:
-        # Create backup directory structure
-        db_dir = backup_dir / db_name
-        db_dir.mkdir(parents=True, exist_ok=True)
+    """Backup a MongoDB collection to a JSON file.
+    
+    Args:
+        client: MongoDB client instance
+        db_name: Database name
+        collection_name: Collection name
+        backup_dir: Directory to store backup
         
-        # Get collection
+    Returns:
+        bool: True if backup was successful, False otherwise
+    """
+    try:
         db = client[db_name]
+        
+        # Check if collection exists using list_collection_names (requires less privileges)
+        if collection_name not in db.list_collection_names():
+            logger.error(f"Collection {collection_name} does not exist in database {db_name}")
+            return False
+        
         collection = db[collection_name]
         
-        # Get total document count
-        total_docs = collection.count_documents({})
+        # Create backup directory
+        try:
+            backup_path = backup_dir / db_name
+            backup_path.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.error(f"Failed to create backup directory: {str(e)}")
+            return False
         
-        # Create backup file
-        backup_file = db_dir / f"{collection_name}.json"
+        # Get all documents
+        try:
+            documents = list(collection.find())
+            logger.info(f"Retrieved {len(documents)} documents from {db_name}.{collection_name}")
+        except Exception as e:
+            logger.error(f"Failed to retrieve documents: {str(e)}")
+            return False
         
-        # Process documents in batches
-        batch_size = 1000
-        processed = 0
+        # Convert ObjectId and datetime to string format
+        def convert_types(doc):
+            if isinstance(doc, dict):
+                return {k: convert_types(v) for k, v in doc.items()}
+            elif isinstance(doc, list):
+                return [convert_types(v) for v in doc]
+            elif isinstance(doc, (ObjectId, datetime)):
+                return {"$type": doc.__class__.__name__, "$value": str(doc)}
+            return doc
         
-        with open(backup_file, 'w') as f:
-            f.write('[\n')
+        try:
+            documents = [convert_types(doc) for doc in documents]
+            logger.info("Successfully converted document types")
+        except Exception as e:
+            logger.error(f"Failed to convert document types: {str(e)}")
+            return False
+        
+        # Write to file
+        try:
+            backup_file = backup_path / f"{collection_name}.json"
+            with open(backup_file, "w") as f:
+                json.dump(documents, f, indent=2)
+            logger.info(f"Successfully wrote backup to {backup_file}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to write backup file: {str(e)}")
+            return False
             
-            cursor = collection.find({})
-            first = True
-            
-            for doc in cursor:
-                if not first:
-                    f.write(',\n')
-                first = False
-                
-                # Process document
-                processed_doc = process_document(doc)
-                json.dump(processed_doc, f, indent=2)
-                processed += 1
-                
-                # Log progress
-                if processed % batch_size == 0:
-                    logger.info(f"Processed {processed}/{total_docs} documents")
-            
-            f.write('\n]')
-        
-        logger.info(f"Successfully backed up {processed} documents to {backup_file}")
-        return True
-        
     except Exception as e:
-        logger.error(f"Error backing up collection: {str(e)}")
+        logger.error(f"Unexpected error during backup: {str(e)}")
         return False
