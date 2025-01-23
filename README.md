@@ -18,6 +18,14 @@ An interactive command-line tool for backing up and restoring MongoDB collection
 
 ## Installation
 
+### From PyPI (Recommended)
+
+```bash
+pip install mongowiz
+```
+
+### From Source
+
 1. Clone the repository:
 
 ```bash
@@ -32,10 +40,10 @@ python -m venv venv
 source venv/bin/activate  # On Windows: .\venv\Scripts\activate
 ```
 
-3. Install dependencies:
+3. Install in development mode:
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Usage
@@ -50,151 +58,85 @@ export MONGODB_URL="mongodb://username:password@localhost:27017"
 # set MONGODB_URL=mongodb://username:password@localhost:27017
 ```
 
-You can also create a `.env` file in the project directory:
+You can also create a `.env` file in your working directory:
 
 ```
 MONGODB_URL=mongodb://username:password@localhost:27017
 ```
 
-### Interactive Mode
+### Command-line Usage
 
-Simply run the scripts without arguments to enter interactive mode:
-
-```bash
-python mongodb_backup.py
-```
-
-In interactive mode, you can:
-
-- View all available databases and collections
-- See collection sizes and document counts
-- Select which collection to backup
-- Choose backup location
-- Monitor backup progress with a rich progress bar
-
-For restore:
+After installation, you can run the wizard using:
 
 ```bash
-python mongodb_restore.py
+mongowiz
 ```
 
-Restore features:
+This will start the interactive wizard that guides you through:
+- Choosing between backup and restore operations
+- Selecting databases and collections
+- Choosing backup locations
+- Monitoring progress with rich console output
 
-- Browse backups by timestamp
-- View backup statistics (databases, collections, total size)
-- Preview collection contents before restore
-- Safety checks for existing collections
-- Progress tracking during restore
+### Python API Usage
 
-### Command-line Mode
+You can also use the package programmatically in your Python code:
 
-If you prefer to run without interaction, use command-line arguments:
+```python
+from pymongo import MongoClient
+from mongowiz.core.backup import backup_collection
+from mongowiz.core.restore import restore_collection
+from pathlib import Path
 
-#### Backup a Collection
+# Connect to MongoDB
+client = MongoClient("mongodb://localhost:27017")
 
-```bash
-python mongodb_backup.py --database your_database --collection your_collection --output ./backups
+# Backup a collection
+backup_dir = Path("my_backups")
+backup_collection(client, "my_database", "my_collection", backup_dir)
+
+# Restore a collection
+restore_collection(client, backup_dir, "my_database", "my_collection")
 ```
 
-Options:
-
-- `--database` or `-d`: MongoDB database name
-- `--collection` or `-c`: Collection name to backup
-- `--output` or `-o`: Output directory for backup files (default: ./backups)
-
-#### Restore a Collection
-
-```bash
-python mongodb_restore.py --database your_database --collection your_collection --input ./backups
-```
-
-Options:
-
-- `--database` or `-d`: Target MongoDB database name
-- `--collection` or `-c`: Target collection name
-- `--input` or `-i`: Input directory containing backup files (default: ./backups)
-
-### Example Usage
-
-1. Interactive backup:
-
-```bash
-python mongodb_backup.py
-# Follow the prompts to select database, collection, and backup location
-```
-
-2. Direct backup:
-
-```bash
-python mongodb_backup.py -d myapp -c users -o ./my_backups
-```
-
-3. Interactive restore:
-
-```bash
-python mongodb_restore.py
-# Follow the prompts to select backup and target collection
-```
-
-4. Direct restore:
-
-```bash
-python mongodb_restore.py -d myapp -c users -i ./my_backups
-```
-
-The tool will show progress bars and detailed information during the backup/restore process.
-
-### Backup Directory Structure
-
-Backups are organized as follows:
+## Project Structure
 
 ```
-mongodb_backup_YYYYMMDD_HHMMSS/
-├── database_name/
-│   └── collection_name.json
-└── ...
+mongowiz/
+├── core/               # Core functionality
+│   ├── backup.py      # Backup operations
+│   └── restore.py     # Restore operations
+├── ui/                # User interface
+│   └── wizard.py      # Interactive CLI wizard
+├── utils/             # Utility functions
+└── __main__.py        # Entry point
+
+tests/
+├── core/              # Core functionality tests
+└── ui/                # UI tests
 ```
-
-Each backup includes:
-
-- Timestamp in the directory name
-- Separate directories for each database
-- JSON files for each collection
-- Collection metadata and statistics
 
 ## Development
 
-### Requirements
-
-- Python 3.8+
-- MongoDB 4.0+
-- Docker (for running tests)
-
-### Running Tests
-
-The test suite uses pytest and testcontainers to run against a real MongoDB instance:
+1. Clone the repository and install development dependencies:
 
 ```bash
-pytest -v -s test_backup_restore.py
+git clone https://github.com/makolabsai/mongodb-backup-wizard.git
+cd mongodb-backup-wizard
+python -m venv venv
+source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+pip install -e ".[dev]"
 ```
 
-The tests verify:
+2. Run tests:
 
-- Backup and restore functionality
-- Data integrity
-- Various data types (ObjectId, datetime, arrays, nested documents)
-- Error handling
-- Container management
+```bash
+pytest
+```
 
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## License
 
