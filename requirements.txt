@@ -1,6 +1,6 @@
-pymongo==4.6.1
+pymongo>=4.6.3
 python-dotenv==1.0.0
-tqdm==4.66.1
+tqdm>=4.66.3
 humanize==4.9.0
 questionary==2.0.1
 rich==13.7.0
