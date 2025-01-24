@@ -36,6 +36,7 @@ env/
 
 # MongoDB Backup Files
 mongodb_backup_*/
+backups/
 
 # Environment Variables
 .env
