@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
+from tqdm import tqdm
 
 from pymongo import MongoClient
 from bson import ObjectId
@@ -15,15 +16,17 @@ def json_serialize(obj):
     """Custom JSON serializer for handling MongoDB specific types."""
     try:
         if obj is None:
-            return ""
+            return None
         if isinstance(obj, datetime):
-            return obj.isoformat()
+            return {"$type": "datetime", "$value": obj.isoformat()}
+        if isinstance(obj, ObjectId):
+            return {"$type": "ObjectId", "$value": str(obj)}
         if isinstance(obj, (bytes, bytearray)):
             return str(obj)
-        return str(obj)
+        return obj
     except Exception as e:
         logger.error(f"Error serializing object of type {type(obj)}: {str(e)}")
-        return ""
+        return None
 
 def process_document(doc):
     """Process a single document, handling None values and serialization."""
@@ -50,7 +53,7 @@ def process_document(doc):
                     processed[k] = json_serialize(v)
             except Exception as e:
                 logger.error(f"Error processing field {k}: {str(e)}")
-                processed[k] = ""
+                processed[k] = None
         return processed
     except Exception as e:
         logger.error(f"Error in process_document: {str(e)}")
@@ -117,41 +120,48 @@ def backup_collection(client, db_name: str, collection_name: str, backup_dir: Pa
         except Exception as e:
             logger.error(f"Failed to create backup directory: {str(e)}")
             return False
-        
-        # Get all documents
+
+        # Get an estimate of total documents using collStats
         try:
-            documents = list(collection.find())
-            logger.info(f"Retrieved {len(documents)} documents from {db_name}.{collection_name}")
+            stats = db.command('collStats', collection_name)
+            estimated_docs = stats.get('count', 0)
         except Exception as e:
-            logger.error(f"Failed to retrieve documents: {str(e)}")
-            return False
+            logger.warning(f"Could not get collection stats, progress may be inaccurate: {e}")
+            estimated_docs = 0
         
-        # Convert ObjectId and datetime to string format
-        def convert_types(doc):
-            if isinstance(doc, dict):
-                return {k: convert_types(v) for k, v in doc.items()}
-            elif isinstance(doc, list):
-                return [convert_types(v) for v in doc]
-            elif isinstance(doc, (ObjectId, datetime)):
-                return {"$type": doc.__class__.__name__, "$value": str(doc)}
-            return doc
+        # Process and write documents in batches
+        backup_file = backup_path / f"{collection_name}.json"
+        processed = 0
+        documents = []  # Collect all documents first for atomic write
         
         try:
-            documents = [convert_types(doc) for doc in documents]
-            logger.info("Successfully converted document types")
-        except Exception as e:
-            logger.error(f"Failed to convert document types: {str(e)}")
-            return False
-        
-        # Write to file
-        try:
-            backup_file = backup_path / f"{collection_name}.json"
-            with open(backup_file, "w") as f:
+            # Use tqdm with estimated total, will adjust if estimate was off
+            with tqdm(total=estimated_docs, desc=f"Backing up {db_name}.{collection_name}", 
+                     unit="docs", dynamic_ncols=True) as pbar:
+                
+                cursor = collection.find(batch_size=1000)
+                
+                for doc in cursor:
+                    # Convert types inline
+                    processed_doc = process_document(doc)
+                    documents.append(processed_doc)
+                    
+                    processed += 1
+                    pbar.update(1)
+                    
+                    # If our estimate was low, update total
+                    if processed > estimated_docs:
+                        pbar.total = processed + 1000
+            
+            # Write all documents at once for atomicity
+            with open(backup_file, 'w') as f:
                 json.dump(documents, f, indent=2)
-            logger.info(f"Successfully wrote backup to {backup_file}")
+                
+            logger.info(f"Successfully backed up {processed} documents to {backup_file}")
             return True
+            
         except Exception as e:
-            logger.error(f"Failed to write backup file: {str(e)}")
+            logger.error(f"Failed during backup: {str(e)}")
             return False
             
     except Exception as e:
